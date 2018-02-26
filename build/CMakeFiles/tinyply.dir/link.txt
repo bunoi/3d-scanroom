@@ -1,0 +1,2 @@
+/usr/bin/ar qc libtinyply.a  CMakeFiles/tinyply.dir/tinyply.cpp.o
+/usr/bin/ranlib libtinyply.a
