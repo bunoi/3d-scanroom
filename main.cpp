@@ -8,6 +8,13 @@
 
 #include <opencv2/opencv.hpp>
 
+#include <pcl/ModelCoefficients.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+
 #include "tinyply.h"
 
 using namespace tinyply;
@@ -127,6 +134,74 @@ void on_trackbar( int , void *)
 	imshow("Occupancy grid", grid);
 
 }
+// plane -0.00455174 -0.988815 0.149075 1.78232
+void cut_plane(vector<float> &all_point, vector<float> &remain)
+{
+	remain.clear();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+	cloud->width  = all_point.size() / 3;
+	cloud->height = 1;
+	cloud->points.resize (cloud->width * cloud->height);
+
+	// Generate the data
+	for (size_t i = 0; i < cloud->points.size (); ++i)
+	{
+		cloud->points[i].x = all_point[3*i];
+		cloud->points[i].y = all_point[3*i + 1];
+		cloud->points[i].z = all_point[3*i + 2];
+	}
+	pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+	pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+	// Create the segmentation object
+	pcl::SACSegmentation<pcl::PointXYZ> seg;
+	// Optional
+	seg.setOptimizeCoefficients (true);
+	// Mandatory
+	seg.setModelType (pcl::SACMODEL_PLANE);
+	seg.setMethodType (pcl::SAC_RANSAC);
+	seg.setDistanceThreshold (0.1);
+
+	seg.setInputCloud (cloud);
+	seg.segment (*inliers, *coefficients);
+
+	std::cerr << "Model coefficients: " << coefficients->values[0] << " " 
+                                      << coefficients->values[1] << " "
+                                      << coefficients->values[2] << " " 
+                                      << coefficients->values[3] << std::endl;
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr new_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr plane(new pcl::PointCloud<pcl::PointXYZ>);
+
+	new_cloud->width  = all_point.size() / 3 - inliers->indices.size();
+	new_cloud->height = 1;
+	new_cloud->points.resize (new_cloud->width * new_cloud->height);
+
+	plane->width  = inliers->indices.size();
+	plane->height = 1;
+	plane->points.resize (plane->width * plane->height);
+
+	int ind = 0,p = 0;
+	for (int i = 0; i < cloud->points.size(); i++)
+	{
+		if ( ind < inliers->indices.size() and inliers->indices[ind] == i)
+		{
+			plane->points[ind] = cloud->points[i];
+			ind++;
+		}
+		else
+		{
+			new_cloud->points[p] = cloud->points[i];
+			p++;
+			remain.push_back(cloud->points[i].x);
+			remain.push_back(cloud->points[i].y);
+			remain.push_back(cloud->points[i].z);
+		}
+	}
+
+	pcl::io::savePCDFileASCII ("deleted_plane.pcd", *new_cloud);
+	pcl::io::savePCDFileASCII ("plane.pcd", *plane);
+}
 
 int main (int argc, char** argv)
 {
@@ -189,9 +264,16 @@ int main (int argc, char** argv)
 	cout << " Track bar Complete" << endl;
  	/// Show some stuff
  	on_trackbar( laser_slider, 0 );
+	vector<float> all,remain;
+	all = verts;
 	while(true)
 	{
 		char c = waitKey(0);
 		if ( c == 'q')	break;
+		if ( c == 'c')	
+		{
+			cut_plane(all, remain);
+			all = remain;
+		}
 	}
 }
