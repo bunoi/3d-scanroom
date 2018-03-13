@@ -4,6 +4,7 @@
         "slist": "cpp",
         "initializer_list": "cpp",
         "utility": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "*.ipp": "cpp"
     }
 }
